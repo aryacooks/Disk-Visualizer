@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/art/icon.png" width="128" alt="Disk Visualizer">
+</p>
+
 <h1 align="center">Disk Visualizer</h1>
 
 <p align="center">
@@ -96,6 +100,29 @@ tighter, and it's where every algorithm bug in this project was actually caught:
 ```bash
 swift run -c release dbscan ~ -n 20
 ```
+
+## Releasing
+
+```bash
+./scripts/release.sh 1.0.0 --publish
+```
+
+Builds, signs with a Developer ID, notarizes with Apple, staples the ticket,
+packages a drag-to-Applications DMG, and creates the GitHub release. It checks
+everything up front and fails loudly rather than dying four minutes into a
+notarization.
+
+It needs three things it can't create for you: an Apple Developer Program
+membership, a *Developer ID Application* certificate in your keychain, and a
+stored `notarytool` credential profile. The script's header walks through all
+three. Credentials are read from the keychain by profile name — no secret is
+ever passed on a command line or written into this repo.
+
+The icon is generated from code by `scripts/make-icon.swift`, so it lives in git
+as something you can read and tweak instead of an opaque binary. Each of the ten
+sizes is drawn natively rather than downscaled: below 128 px the tile grows, the
+ring thickens and the pastels deepen, because a design tuned for 512 px turns
+into a beige smudge in the Dock.
 
 ## What's in it
 
@@ -207,7 +234,8 @@ correct the whole time.
 | Snapshots — save, load, diff | done |
 | Thermals — on-die temps + battery | done |
 | Staged cleanup queue | done |
-| Notarization, app icon, ship | not started |
+| App icon | done, generated from code |
+| Notarization + DMG + release pipeline | done, needs an Apple Developer account to run |
 
 ## License
 
