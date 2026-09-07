@@ -28,6 +28,10 @@ It was built by working out how [DiskBuddy](https://www.diskbuddy.com) does it �
 the speed, the layouts, the safety rules — and rebuilding it from scratch in
 Swift. `docs/DESIGN.md` is the teardown.
 
+<p align="center">
+  <img src="docs/art/folders.png" alt="Folders view — 404 GB across 2.28 million files, sized as you browse">
+</p>
+
 ## Install
 
 You need macOS 14 or later and Xcode command-line tools. If `swift --version`
@@ -130,6 +134,17 @@ into a beige smudge in the Dock.
 Sizes, Age Map, Treemap. Switching views is instant because they're all just
 different projections of the same tree in memory.
 
+<table>
+<tr>
+<td width="50%"><img src="docs/art/sunburst.png" alt="Sunburst view"></td>
+<td width="50%"><img src="docs/art/treemap.png" alt="Treemap view"></td>
+</tr>
+<tr>
+<td><b>Sunburst</b> — every ring is a directory level, every arc sized by what it holds. Hover any arc for its size and share.</td>
+<td><b>Treemap</b> — every file as a rectangle, sized by bytes. Layout culls anything too small to see, so 907k nodes become 11k cells.</td>
+</tr>
+</table>
+
 **Duplicates that aren't fooled.** A three-stage funnel — group by exact size,
 hash the first and last 4 KB, then full SHA-256 only for the survivors. On a real
 home folder that's 823,921 same-size files narrowed to 57,144 genuine groups. It
@@ -145,6 +160,10 @@ each by confidence — exact bundle-ID match, app name, or just a name fragment.
 
 **Monitor.** CPU, memory, network, per-process disk I/O, and on-die temperatures
 in Celsius, plus battery health and cycle count.
+
+<p align="center">
+  <img src="docs/art/monitor.png" alt="Monitor tab — CPU, memory, network, storage, temperature and battery, with all 44 sensors listed">
+</p>
 
 ## Nothing gets deleted
 
