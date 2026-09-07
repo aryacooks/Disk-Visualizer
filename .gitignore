@@ -1,0 +1,11 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Built app bundles — produced by scripts/bundle-app.sh and scripts/dev.sh
+build/
+*.app/
+
+# macOS
+.DS_Store
