@@ -496,6 +496,26 @@ public final class AppState: ObservableObject {
         return label(forNode: navHistory[navIndex + 1])
     }
 
+    /// The enclosing folder. `nil` at the scan root, which is as far out as a
+    /// loaded scan goes — there is no data above it to show.
+    public var parentOfCurrent: Int? {
+        guard let store = store, currentFolderIndex > 0 else { return nil }
+        let p = Int(store.parent[currentFolderIndex])
+        return p >= 0 ? p : nil
+    }
+
+    public var upDestination: String? {
+        parentOfCurrent.map { label(forNode: $0) }
+    }
+
+    /// Out one level. Distinct from Back: Back retraces where you have been,
+    /// Up walks the tree. After arriving somewhere by clicking a deep sunburst
+    /// arc, those are different places, and you usually want this one.
+    public func goUp() {
+        guard let p = parentOfCurrent else { return }
+        zoomOut { self.go(to: p) }
+    }
+
     public func goBack() {
         guard canGoBack else { return }
         navIndex -= 1

@@ -177,12 +177,14 @@ middle missing — and collapses to `root … parent child` once the trail outgr
 the toolbar.
 
 The full path of whatever you are looking at gets its own line under the view
-switcher, and clicking it copies the path.
+switcher, and clicking it copies the path. Beside it is **Up** (`⌘↑`), which
+names the folder it will take you out to.
 
 **Back and forward** are a browser history, not a parent chain: they retrace
 where you actually went, which is a different thing once you have jumped via a
 breadcrumb, a Quick Win or Home. `⌘[` and `⌘]`, and each button's tooltip names
-where it goes.
+where it goes. Up is the other one — it walks the tree rather than your route,
+which is usually what you want after landing somewhere by clicking a deep arc.
 
 **Duplicates that aren't fooled.** A three-stage funnel — group by exact size,
 hash the first and last 4 KB, then full SHA-256 only for the survivors. On a real

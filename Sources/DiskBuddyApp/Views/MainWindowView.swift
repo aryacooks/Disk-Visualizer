@@ -437,6 +437,45 @@ private struct TabPill: View {
     }
 }
 
+/// Out one level, and it says where that is.
+///
+/// Back and Up are genuinely different once you can reach a folder by clicking
+/// a deep sunburst arc: Back retraces the route you took, Up walks the tree.
+private struct UpButton: View {
+    @EnvironmentObject var app: AppState
+    @State private var hovering = false
+
+    var body: some View {
+        let name = app.upDestination
+        Button { app.goUp() } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 10, weight: .bold))
+                Text(name ?? "Up")
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: 150)
+            }
+            .foregroundStyle(name == nil ? Theme.inkFaint.opacity(0.5) : Theme.ink)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(hovering && name != nil ? Theme.pillSoft.opacity(0.7) : Theme.rail)
+                    .overlay(RoundedRectangle(cornerRadius: 8)
+                        .stroke(Theme.hairline, lineWidth: 1))
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .disabled(name == nil)
+        .onHover { hovering = $0 }
+        .keyboardShortcut(.upArrow, modifiers: .command)
+        .help(name.map { "Go up to \($0)  ⌘↑" } ?? "Already at the top of this scan")
+    }
+}
+
 /// The full path of whatever you are looking at, stated plainly.
 ///
 /// Truncates in the middle only when the pane genuinely runs out of room, and
@@ -569,19 +608,15 @@ private struct CenterPane: View {
             HStack(spacing: 10) {
                 ViewSwitcher()
                 Spacer(minLength: 8)
-                // The toolbar breadcrumb has to survive next to five tabs and a
-                // search field, so it truncates hard — "Macintosh HD" becomes
-                // "Mac…HD". This row has the space to say where you actually
-                // are, in full.
-                // Capped rather than free: it should be the widest thing in
-                // this row without pushing the size segments or the sunburst
-                // slider around as you move between shallow and deep folders.
-                CurrentPathStrip()
-                    // A minimum as well as a maximum: with only a cap, the
-                    // HStack squeezed the flexible child down to almost
-                    // nothing and the path rendered as "//Use…apps".
-                    .frame(minWidth: 190, maxWidth: 460)
-                Spacer(minLength: 8)
+                // Drop the caption before letting anything wrap.
+                ViewThatFits(in: .horizontal) {
+                    Text(app.activeCenterView.caption)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.inkFaint)
+                        .lineLimit(1)
+                        .fixedSize()
+                    Color.clear.frame(width: 0, height: 0)
+                }
                 SizeModeSegments()
                 if case .sunburst = app.activeCenterView {
                     HStack(spacing: 7) {
@@ -604,8 +639,11 @@ private struct CenterPane: View {
             // sunburst slider, it collapsed to "//Use…apps" — and forcing a
             // minimum width there pushed the whole window into overflow. Here
             // it has the full pane and competes with nothing.
-            CurrentPathStrip()
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 8) {
+                UpButton()
+                CurrentPathStrip()
+                Spacer(minLength: 0)
+            }
         }
         .padding(.horizontal, 22)
         .padding(.top, 18)
