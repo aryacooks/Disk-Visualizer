@@ -24,6 +24,11 @@ struct DiskBuddyApp: App {
         WindowGroup("Disk Buddy Checker") {
             MainWindowView()
                 .environmentObject(appState)
+                .onReceive(NotificationCenter.default.publisher(
+                    for: NSApplication.didBecomeActiveNotification)) { _ in
+                    // Coming back from System Settings is the common case.
+                    appState.refreshFullDiskAccess()
+                }
 
                 // Deliberately no scan on launch. Auto-scanning re-read the
                 // disk every time and re-triggered macOS permission prompts for

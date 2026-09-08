@@ -154,7 +154,13 @@ into a beige smudge in the Dock.
 
 **Eight views, one scan.** Folders, Sunburst, Flame, Bubbles, Mind Map, Top
 Sizes, Age Map, Treemap. Switching views is instant because they're all just
-different projections of the same tree in memory.
+different projections of the same tree in memory. A branch keeps one colour
+family everywhere, with each node shaded within it — so you can see both that
+Library is big and that it contains a hundred different things.
+
+**It fits in a window.** The inspector hides below 1180pt, the sidebar narrows
+below 1040, and the tab labels drop to icons below 1120. Nothing needs
+horizontal scrolling and nothing needs fullscreen.
 
 <table>
 <tr>

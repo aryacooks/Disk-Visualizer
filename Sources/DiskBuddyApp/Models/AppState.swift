@@ -195,9 +195,29 @@ public final class AppState: ObservableObject {
     }
 
     public func openFullDiskAccessSettings() {
-        if let u = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
-            NSWorkspace.shared.open(u)
+        // The pane identifier changed in Ventura. Try the current one first and
+        // keep the legacy one as a fallback rather than picking one and hoping;
+        // both were verified to land on the Full Disk Access pane here.
+        let candidates = [
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
+        ]
+        for c in candidates {
+            if let u = URL(string: c), NSWorkspace.shared.open(u) { return }
         }
+        // Last resort: at least get them into Settings.
+        NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/System Settings.app"))
+    }
+
+    /// Re-probe when the app comes back to the front.
+    ///
+    /// Granting Full Disk Access usually makes macOS relaunch the app, but not
+    /// always — and when it doesn't, the banner used to sit there insisting the
+    /// scan was incomplete long after it wasn't. Checking on activation costs
+    /// one `access(2)` and makes the banner clear itself.
+    public func refreshFullDiskAccess() {
+        let now = AppState.detectFullDiskAccess()
+        if now != hasFullDiskAccess { hasFullDiskAccess = now }
     }
 
     public func refreshVolumes() {

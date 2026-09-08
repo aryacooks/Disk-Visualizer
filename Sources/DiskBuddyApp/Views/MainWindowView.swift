@@ -1,6 +1,19 @@
 import SwiftUI
 import ScannerCore
 
+/// True when the window is too narrow for the toolbar to spell everything out.
+/// Read by the tab pills and the breadcrumb, which shed their labels first.
+private struct CompactChromeKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var compactChrome: Bool {
+        get { self[CompactChromeKey.self] }
+        set { self[CompactChromeKey.self] = newValue }
+    }
+}
+
 public struct MainWindowView: View {
     @EnvironmentObject var app: AppState
 
@@ -8,8 +21,35 @@ public struct MainWindowView: View {
 
     @StateObject private var cleanup = CleanupQueue()
 
+    /// Layout thresholds, in points of window width. Below each one something
+    /// gives way, in order of how little it costs to lose it.
+    ///
+    /// Before this, the sidebar was a fixed 258, the inspector a fixed 300 and
+    /// the window refused to go below 1240 — so on a normal, non-fullscreen
+    /// window the centre pane was crushed and the two rails had to be scrolled
+    /// sideways to read.
+    private enum Breakpoint {
+        static let inspector: CGFloat = 1180   // below this, hide the inspector
+        static let wideSidebar: CGFloat = 1040 // below this, narrow the sidebar
+        static let tabLabels: CGFloat = 1120   // below this, tabs become icons
+    }
+
     public var body: some View {
-        VStack(spacing: 0) {
+        GeometryReader { geo in
+            layout(width: geo.size.width)
+        }
+        .frame(minWidth: 820, minHeight: 560)
+        .environmentObject(cleanup)
+        .preferredColorScheme(app.darkMode ? .dark : .light)
+        .sheet(isPresented: $cleanup.showReview) { CleanupReviewSheet() }
+    }
+
+    private func layout(width: CGFloat) -> some View {
+        let showInspector = app.showInspector && width >= Breakpoint.inspector
+        let sidebarWidth: CGFloat = width < Breakpoint.wideSidebar ? 208 : 258
+        let inspectorWidth: CGFloat = width < 1320 ? 268 : 300
+
+        return VStack(spacing: 0) {
             TopBar()
             Divider().overlay(Theme.hairline)
             if !app.hasFullDiskAccess { FullDiskAccessBanner() }
@@ -26,7 +66,7 @@ public struct MainWindowView: View {
             } else {
             HStack(spacing: 0) {
                 SidebarView()
-                    .frame(width: 258)
+                    .frame(width: sidebarWidth)
                 Divider().overlay(Theme.hairline)
                 Group {
                     if app.mainTab == .explore {
@@ -44,20 +84,17 @@ public struct MainWindowView: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                if app.showInspector {
+                if showInspector {
                     Divider().overlay(Theme.hairline)
                     InspectorView()
-                        .frame(width: 300)
+                        .frame(width: inspectorWidth)
                 }
             }
             }
             if cleanup.count > 0 { CleanupBar() }
         }
         .background(Theme.ground)
-        .frame(minWidth: 1240, minHeight: 680)
-        .environmentObject(cleanup)
-        .preferredColorScheme(app.darkMode ? .dark : .light)
-        .sheet(isPresented: $cleanup.showReview) { CleanupReviewSheet() }
+        .environment(\.compactChrome, width < Breakpoint.tabLabels)
     }
 }
 
@@ -415,16 +452,22 @@ private struct TabPill: View {
     let isActive: Bool
     let action: () -> Void
 
+    @Environment(\.compactChrome) private var compact
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 5) {
                 Image(systemName: tab.icon).font(.system(size: 11, weight: .medium))
-                Text(tab.rawValue)
-                    .font(.system(size: 12, weight: .medium))
-                    // "Applications" broke across two lines as soon as a deep
-                    // breadcrumb competed for the same row.
-                    .lineLimit(1)
-                    .fixedSize()
+                // On a narrow window the labels go and the icons stay: five
+                // words is ~300pt that the path and the search field need more.
+                if !compact || isActive {
+                    Text(tab.rawValue)
+                        .font(.system(size: 12, weight: .medium))
+                        // "Applications" broke across two lines as soon as a
+                        // deep breadcrumb competed for the same row.
+                        .lineLimit(1)
+                        .fixedSize()
+                }
             }
             .foregroundStyle(isActive ? Theme.pillText : Theme.inkSecond)
             .padding(.horizontal, 11).padding(.vertical, 6)

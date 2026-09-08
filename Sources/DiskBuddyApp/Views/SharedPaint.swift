@@ -7,15 +7,23 @@ enum SharedPaint {
 
     static func color(_ store: NodeStore, _ index: Int, depth: Int,
                       mode: AppState.SizeMode, rootIndex: Int) -> Color {
-        // Deeper nodes fade slightly so nesting reads without extra borders.
-        let fade = max(0.6, 1.0 - Double(depth) * 0.035)
+        // Deeper nodes fade so nesting reads without extra borders. The floor
+        // used to be 0.6, which on a saturated palette turned a depth-10 cell
+        // into mud; with the richer colours it can go lighter and still be
+        // distinguishable from its neighbours.
+        let fade = max(0.42, 1.0 - Double(depth) * 0.055)
 
         switch mode {
         case .byFolder:
-            return cardColor(store, topAncestor(store, index, rootIndex)).opacity(fade)
+            // The saturated palette, not the card pastels. A treemap cell can
+            // be four pixels wide with no room for a label, so its colour is
+            // the only thing telling you which branch it belongs to.
+            let branch = topAncestor(store, index, rootIndex)
+            let family = Theme.vizColor(store.name(branch))
+            return Theme.shade(family, node: store.name(index)).opacity(fade)
 
         case .byType:
-            if store.isDir(index) { return Theme.track.opacity(max(0.45, fade * 0.7)) }
+            if store.isDir(index) { return Theme.track.opacity(max(0.35, fade * 0.7)) }
             let ext = (store.name(index) as NSString).pathExtension
             return Theme.categoryColor(FileTypeCategory.classify(extension: ext)).opacity(fade)
 
@@ -26,10 +34,6 @@ enum SharedPaint {
                          green: 0.62 - 0.13 * t,
                          blue: 0.46 - 0.10 * t).opacity(fade)
         }
-    }
-
-    private static func cardColor(_ store: NodeStore, _ index: Int) -> Color {
-        Theme.cardColor(store.name(index))
     }
 
     /// Walk up to the child of the current view root, so a whole branch shares

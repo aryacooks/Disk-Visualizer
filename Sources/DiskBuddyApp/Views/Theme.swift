@@ -60,6 +60,34 @@ public enum Theme {
     /// tuned to sit behind text is invisible as a thin stroke on cream.
     public static let strokeColors: [Color] = cardTops.map { deepen($0, 0.30) }
 
+    // MARK: - Visualisation palette
+
+    /// Saturated cousins of the card palette, for the treemap, sunburst, flame,
+    /// bubbles and mind map.
+    ///
+    /// The folder cards can afford to be pale: they are big, and they carry
+    /// dark text. A treemap cell is often a few pixels wide with no label at
+    /// all, so colour is the only thing distinguishing one branch from the
+    /// next — and ten near-white pastels side by side read as one grey mass.
+    public static let vizColors: [Color] = cardTops.map { enrich($0) }
+
+    /// Push saturation up and brightness down. Hue is untouched, so a folder
+    /// keeps the same identity in the cards and in the charts.
+    private static func enrich(_ c: Color) -> Color {
+        let ns = (NSColor(c).usingColorSpace(.sRGB) ?? .gray)
+        var h: CGFloat = 0, sat: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        ns.getHue(&h, saturation: &sat, brightness: &b, alpha: &a)
+        return Color(nsColor: NSColor(hue: h,
+                                      saturation: min(1, sat * 2.45),
+                                      brightness: max(0, b * 0.90),
+                                      alpha: 1))
+    }
+
+    /// Hash-indexed like `cardColor`, so a branch keeps its hue everywhere.
+    public static func vizColor(_ name: String) -> Color {
+        vizColors[hashIndex(name, vizColors.count)]
+    }
+
     /// Blend toward ink. `Color.mix(with:by:)` is macOS 15, and this app
     /// targets 14.
     private static func deepen(_ c: Color, _ amount: Double) -> Color {
@@ -70,6 +98,42 @@ public enum Theme {
             green: ns.greenComponent * (1 - amount) + k.greenComponent * amount,
             blue: ns.blueComponent * (1 - amount) + k.blueComponent * amount,
             alpha: 1))
+    }
+
+    /// FNV-1a again, but as three independent unit values, for shading a
+    /// single node within its branch's colour family.
+    public static func hash01(_ name: String, _ salt: UInt64) -> Double {
+        var h: UInt64 = 0xcbf29ce484222325 ^ salt
+        for b in name.utf8 { h = (h ^ UInt64(b)) &* 0x100000001b3 }
+        return Double(h % 10_000) / 10_000.0
+    }
+
+    /// Shift a branch colour a little, per node.
+    ///
+    /// Colouring a whole branch one flat hue makes a treemap of a deep tree
+    /// read as a few solid blocks — you can see that Library is big, but not
+    /// that it contains a hundred different things. Jittering hue, saturation
+    /// and brightness by a hash of the node's own name keeps the family
+    /// obvious while letting individual cells separate from their siblings.
+    public static func shade(_ base: Color, node name: String) -> Color {
+        let ns = (NSColor(base).usingColorSpace(.sRGB) ?? .gray)
+        var h: CGFloat = 0, sat: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        ns.getHue(&h, saturation: &sat, brightness: &b, alpha: &a)
+
+        // ±0.055 of the wheel: enough to separate neighbours, not enough to
+        // turn a green branch blue.
+        let dh = (hash01(name, 0x9E37) - 0.5) * 0.11
+        let ds = 0.78 + hash01(name, 0x51ED) * 0.44
+        let db = 0.86 + hash01(name, 0xC2B2) * 0.26
+
+        var hue = h + CGFloat(dh)
+        if hue < 0 { hue += 1 }
+        if hue > 1 { hue -= 1 }
+
+        return Color(nsColor: NSColor(hue: hue,
+                                      saturation: min(1, sat * CGFloat(ds)),
+                                      brightness: min(1, b * CGFloat(db)),
+                                      alpha: 1))
     }
 
     /// FNV-1a over the name — stable across launches, unlike `hashValue`.
