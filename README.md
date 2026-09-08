@@ -171,10 +171,15 @@ different projections of the same tree in memory.
 the level you were on grows past you, anchored on what you clicked, and the
 next level settles in its place. Back plays the same motion in reverse.
 
-A click on an outer sunburst arc can drop ten levels at once, so the
-breadcrumb records the whole ancestor chain rather than a jump with the middle
-missing, and collapses to `root … parent child` once the trail outgrows the
-toolbar.
+A click on an outer sunburst arc can drop ten levels at once, so the breadcrumb
+is derived from the tree — the real ancestor chain, never a jump with the
+middle missing — and collapses to `root … parent child` once the trail outgrows
+the toolbar.
+
+**Back and forward** are a browser history, not a parent chain: they retrace
+where you actually went, which is a different thing once you have jumped via a
+breadcrumb, a Quick Win or Home. `⌘[` and `⌘]`, and each button's tooltip names
+where it goes.
 
 **Duplicates that aren't fooled.** A three-stage funnel — group by exact size,
 hash the first and last 4 KB, then full SHA-256 only for the survivors. On a real

@@ -43,6 +43,13 @@ public final class AppState: ObservableObject {
     @Published public var selectedNodeIndex: Int? = nil
     @Published public var breadcrumbs: [(name: String, index: Int)] = []
 
+    /// Where you have been, in the order you went there — a browser history,
+    /// not a parent chain. Back used to mean "up one level", which is a
+    /// different thing: after jumping from a deep folder to a breadcrumb or a
+    /// Quick Win, "up" leads somewhere you have never been.
+    @Published public private(set) var navHistory: [Int] = [0]
+    @Published public private(set) var navIndex: Int = 0
+
     // Disk gauge properties
     @Published public var volumeTotal: Int64 = 0
     @Published public var volumeFree: Int64 = 0
@@ -163,6 +170,7 @@ public final class AppState: ObservableObject {
         self.loadedFromSnapshot = latest
         self.currentFolderIndex = 0
         self.breadcrumbs = [(AppState.friendlyRootName(latest.rootPath), 0)]
+        resetHistory()
         updateVolumeInfo(for: latest.rootPath)
         recomputeDerived(store: store, rootPath: latest.rootPath)
     }
@@ -257,9 +265,10 @@ public final class AppState: ObservableObject {
     }
 
     public func navigateToRoot() {
-        currentFolderIndex = 0
-        selectedNodeIndex = nil
-        breadcrumbs = [(AppState.friendlyRootName(scanRootPath), 0)]
+        // Recorded, not reset: Home is a move within the same tree, so Back
+        // should still take you where you were before you pressed it. Only a
+        // new tree (a scan, or a restored snapshot) invalidates the history.
+        go(to: 0)
         activeCenterView = .folders
         mainTab = .explore
     }
@@ -345,6 +354,7 @@ public final class AppState: ObservableObject {
         self.currentFolderIndex = 0
         self.selectedNodeIndex = nil
         self.breadcrumbs = [(AppState.friendlyRootName(path), 0)]
+        resetHistory()
 
         let scanner = ScannerCore.Scanner()
         self.currentScanner = scanner
@@ -436,25 +446,7 @@ public final class AppState: ObservableObject {
     public func drillInto(nodeIndex: Int) {
         guard let store = store, store.isDir(nodeIndex) else { return }
         guard nodeIndex != currentFolderIndex else { return }
-
-        // A click in the sunburst, treemap or flame chart can land several
-        // levels below the current root. Walk the ancestor chain and record
-        // every level, or the breadcrumb trail claims a path that doesn't
-        // exist and Back jumps further than one step.
-        var chain: [Int] = []
-        var cur = nodeIndex
-        while cur != currentFolderIndex {
-            chain.append(cur)
-            let p = Int(store.parent[cur])
-            if p < 0 { break }          // walked past the root: shouldn't happen
-            cur = p
-        }
-
-        currentFolderIndex = nodeIndex
-        selectedNodeIndex = nil
-        for node in chain.reversed() {
-            breadcrumbs.append((store.name(node), node))
-        }
+        go(to: nodeIndex)
     }
 
     /// What a click on a shape means, in every visualiser.
@@ -484,19 +476,85 @@ public final class AppState: ObservableObject {
     }
 
     public func navigateToBreadcrumb(index: Int) {
-        guard let sliceIdx = breadcrumbs.firstIndex(where: { $0.index == index }) else { return }
-        breadcrumbs = Array(breadcrumbs.prefix(through: sliceIdx))
-        currentFolderIndex = index
-        selectedNodeIndex = nil
+        go(to: index)
     }
 
-    public func navigateBack() {
-        guard breadcrumbs.count > 1 else { return }
-        breadcrumbs.removeLast()
-        if let parent = breadcrumbs.last {
-            currentFolderIndex = parent.index
-            selectedNodeIndex = nil
+    // MARK: - Back / forward
+
+    public var canGoBack: Bool { navIndex > 0 }
+    public var canGoForward: Bool { navIndex + 1 < navHistory.count }
+
+    /// Name of the place Back would take you, for the button's tooltip. A back
+    /// button that doesn't say where it goes is a guess.
+    public var backDestination: String? {
+        guard canGoBack else { return nil }
+        return label(forNode: navHistory[navIndex - 1])
+    }
+
+    public var forwardDestination: String? {
+        guard canGoForward else { return nil }
+        return label(forNode: navHistory[navIndex + 1])
+    }
+
+    public func goBack() {
+        guard canGoBack else { return }
+        navIndex -= 1
+        zoomOut { self.go(to: navHistory[navIndex], record: false) }
+    }
+
+    public func goForward() {
+        guard canGoForward else { return }
+        navIndex += 1
+        zoomAnchor = .center
+        zoomingIn = true
+        withAnimation(.spring(response: 0.40, dampingFraction: 0.82)) {
+            self.go(to: navHistory[navIndex], record: false)
         }
+    }
+
+    /// Every folder change goes through here, so the breadcrumb trail and the
+    /// history can never disagree with `currentFolderIndex`.
+    public func go(to node: Int, record: Bool = true) {
+        guard store != nil else { return }
+        currentFolderIndex = node
+        selectedNodeIndex = nil
+        rebuildBreadcrumbs(for: node)
+        guard record, navHistory.isEmpty || navHistory[navIndex] != node else { return }
+        // A new move discards anything that was ahead of the cursor, exactly
+        // as a browser does.
+        if navIndex + 1 < navHistory.count {
+            navHistory.removeSubrange((navIndex + 1)...)
+        }
+        navHistory.append(node)
+        navIndex = navHistory.count - 1
+    }
+
+    /// Derived from the tree rather than accumulated, so it stays correct no
+    /// matter how you arrived — a drill ten levels deep, a Back, a breadcrumb
+    /// jump or a Quick Win.
+    private func rebuildBreadcrumbs(for node: Int) {
+        guard let store = store else { return }
+        var chain: [Int] = []
+        var cur = node
+        while cur > 0 {
+            chain.append(cur)
+            let p = Int(store.parent[cur])
+            if p < 0 { break }
+            cur = p
+        }
+        breadcrumbs = [(AppState.friendlyRootName(scanRootPath), 0)]
+            + chain.reversed().map { (store.name($0), $0) }
+    }
+
+    private func label(forNode node: Int) -> String {
+        guard let store = store else { return "" }
+        return node == 0 ? AppState.friendlyRootName(scanRootPath) : store.name(node)
+    }
+
+    /// A fresh tree invalidates every recorded position.
+    private func resetHistory() {
+        navHistory = [0]
+        navIndex = 0
     }
 
     public func selectNode(_ index: Int?) {

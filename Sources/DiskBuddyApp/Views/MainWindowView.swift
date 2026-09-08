@@ -228,8 +228,11 @@ private struct TopBar: View {
         func entry(_ i: Int) -> Crumb {
             .crumb(name: all[i].name, index: all[i].index, isLast: i == last)
         }
-        guard all.count > 4 else { return all.indices.map(entry) }
-        return [entry(0), .gap] + ((all.count - 2)...last).map(entry)
+        // Aggressive on purpose. This row also carries five tabs, back and
+        // forward, a search field and four controls; at four crumbs the tabs
+        // were being pushed off the left edge of the window.
+        guard all.count > 3 else { return all.indices.map(entry) }
+        return [entry(0), .gap, entry(last - 1), entry(last)]
     }
 
     var body: some View {
@@ -237,17 +240,27 @@ private struct TopBar: View {
             ForEach(AppState.MainTab.allCases) { tab in
                 TabPill(tab: tab, isActive: app.mainTab == tab) { app.mainTab = tab }
             }
+            // The tabs are the app's primary navigation; a long path must
+            // never be what pushes them out of the window.
+            .layoutPriority(2)
 
             Divider().frame(height: 18).padding(.horizontal, 8)
 
-            // Breadcrumb
-            Button { app.zoomOut { app.navigateBack() } } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(app.breadcrumbs.count > 1 ? Theme.inkSecond : Theme.inkFaint.opacity(0.5))
-            }
-            .buttonStyle(.plain)
-            .disabled(app.breadcrumbs.count <= 1)
+            // Back / forward. The old control was an 11pt chevron with no hit
+            // area beyond the glyph itself, no hover state, no shortcut, and
+            // nothing telling you where it went.
+            NavButton(icon: "chevron.left",
+                      destination: app.backDestination,
+                      verb: "Back",
+                      shortcut: "[",
+                      enabled: app.canGoBack) { app.goBack() }
+
+            NavButton(icon: "chevron.right",
+                      destination: app.forwardDestination,
+                      verb: "Forward",
+                      shortcut: "]",
+                      enabled: app.canGoForward) { app.goForward() }
+                .padding(.trailing, 2)
 
             ForEach(Array(crumbTrail.enumerated()), id: \.offset) { i, entry in
                 switch entry {
@@ -269,9 +282,12 @@ private struct TopBar: View {
                             // times its height.
                             .lineLimit(1)
                             .truncationMode(.middle)
-                            .frame(maxWidth: 110)
-                            .fixedSize(horizontal: true, vertical: false)
-                            .padding(.horizontal, 9).padding(.vertical, 4)
+                            // No `.fixedSize` here: it overrides the cap and
+                            // lets a name like "Application Support" claim its
+                            // full ideal width, which is what pushed the tabs
+                            // off the left edge again.
+                            .frame(maxWidth: 88)
+                            .padding(.horizontal, 7).padding(.vertical, 4)
                             .background(
                                 RoundedRectangle(cornerRadius: 7)
                                     .fill(isLast ? Theme.pillSoft.opacity(0.7) : .clear)
@@ -359,6 +375,38 @@ private struct TopBar: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(Theme.rail)
+    }
+}
+
+/// A real back/forward button: a 26pt target, a hover state, a disabled
+/// state, a ⌘-shortcut, and a tooltip that names where it goes.
+private struct NavButton: View {
+    let icon: String
+    let destination: String?
+    let verb: String
+    let shortcut: String
+    let enabled: Bool
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(enabled ? Theme.ink : Theme.inkFaint.opacity(0.45))
+                .frame(width: 26, height: 24)
+                .background(
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(hovering && enabled ? Theme.pillSoft.opacity(0.7) : .clear)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 7))
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .onHover { hovering = $0 }
+        .keyboardShortcut(KeyEquivalent(Character(shortcut)), modifiers: .command)
+        .help(destination.map { "\(verb) to \($0)  ⌘\(shortcut)" } ?? "\(verb)  ⌘\(shortcut)")
     }
 }
 
