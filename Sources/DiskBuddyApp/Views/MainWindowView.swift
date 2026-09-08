@@ -13,7 +13,17 @@ public struct MainWindowView: View {
             TopBar()
             Divider().overlay(Theme.hairline)
             if !app.hasFullDiskAccess { FullDiskAccessBanner() }
-            if let snap = app.loadedFromSnapshot { SnapshotBanner(meta: snap) }
+            if let snap = app.loadedFromSnapshot, !app.isScanning { SnapshotBanner(meta: snap) }
+
+            // A scan takes over the whole body, sidebar and inspector included.
+            // Anything left on screen would be the PREVIOUS scan's numbers:
+            // live-looking, wrong, and about to be replaced. Partial totals are
+            // not merely stale — subtree sizes don't exist until the reverse
+            // pass runs, so a half-built tree reads 0 B everywhere.
+            if app.isScanning {
+                ScanningView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
             HStack(spacing: 0) {
                 SidebarView()
                     .frame(width: 258)
@@ -39,6 +49,7 @@ public struct MainWindowView: View {
                     InspectorView()
                         .frame(width: 300)
                 }
+            }
             }
             if cleanup.count > 0 { CleanupBar() }
         }
@@ -368,9 +379,9 @@ private struct CenterPane: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if app.isScanning && app.store == nil {
-                ScanningPlaceholder()
-            } else if app.store == nil {
+            // Scanning is handled one level up, in MainWindowView's body: it
+            // replaces the entire window content, not just this pane.
+            if app.store == nil {
                 EmptyStatePane()
             } else {
                 header
@@ -589,22 +600,6 @@ private struct EmptyStatePane: View {
             }
             .buttonStyle(.plain)
             .padding(.top, 4)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-private struct ScanningPlaceholder: View {
-    @EnvironmentObject var app: AppState
-    var body: some View {
-        VStack(spacing: 10) {
-            ProgressView().scaleEffect(0.8)
-            Text("Scanning \(app.scanRootPath)")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Theme.ink)
-            Text("\(Fmt.count(app.liveProgress.files)) files · \(Fmt.bytes(app.liveProgress.allocated))")
-                .font(.system(size: 11).monospacedDigit())
-                .foregroundStyle(Theme.inkSecond)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

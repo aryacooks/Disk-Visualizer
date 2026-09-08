@@ -146,8 +146,13 @@ public struct ScanProgress: Sendable {
     public var currentPath: String
     public var isComplete: Bool
     public var elapsed: TimeInterval
+    /// True once the walk is finished and the O(n) reverse pass that computes
+    /// subtree totals is running. On a 2.5M-node tree that pass takes long
+    /// enough to see, and without this flag the UI sits on a frozen file
+    /// counter looking hung — the same failure the duplicate hasher has.
+    public var isRollingUp: Bool
 
-    public init(files: Int = 0, dirs: Int = 0, allocated: Int64 = 0, logical: Int64 = 0, currentPath: String = "", isComplete: Bool = false, elapsed: TimeInterval = 0) {
+    public init(files: Int = 0, dirs: Int = 0, allocated: Int64 = 0, logical: Int64 = 0, currentPath: String = "", isComplete: Bool = false, elapsed: TimeInterval = 0, isRollingUp: Bool = false) {
         self.files = files
         self.dirs = dirs
         self.allocated = allocated
@@ -155,6 +160,7 @@ public struct ScanProgress: Sendable {
         self.currentPath = currentPath
         self.isComplete = isComplete
         self.elapsed = elapsed
+        self.isRollingUp = isRollingUp
     }
 }
 
@@ -168,6 +174,7 @@ public final class Scanner: @unchecked Sendable {
     private let statsLock = NSLock()
     private let seenLock = NSLock()
     private var seenInodes = Set<UInt64>()      // only for linkcount > 1
+    private var rollingUp = false               // guarded by statsLock
     private var rootDev: Int32 = 0
     private var crossMounts = false
     private var isCancelled = false
@@ -202,7 +209,8 @@ public final class Scanner: @unchecked Sendable {
             logical: stats.logical,
             currentPath: currentScanningPath,
             isComplete: false,
-            elapsed: el
+            elapsed: el,
+            isRollingUp: rollingUp
         )
     }
 
@@ -231,7 +239,9 @@ public final class Scanner: @unchecked Sendable {
         }
         group.wait()
         if !isCancelled {
+            statsLock.lock(); rollingUp = true; statsLock.unlock()
             store.rollUp()
+            statsLock.lock(); rollingUp = false; statsLock.unlock()
             if let onProgress = onProgress {
                 var finalProgress = currentProgress()
                 finalProgress.isComplete = true

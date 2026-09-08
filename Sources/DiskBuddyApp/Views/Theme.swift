@@ -55,6 +55,23 @@ public enum Theme {
         Color(red: 0.898, green: 0.878, blue: 0.847),  // stone
     ]
 
+    /// The same palette, exposed for decorative use (the scanning emblem),
+    /// where there is no folder name to hash — deepened, because a pastel
+    /// tuned to sit behind text is invisible as a thin stroke on cream.
+    public static let strokeColors: [Color] = cardTops.map { deepen($0, 0.30) }
+
+    /// Blend toward ink. `Color.mix(with:by:)` is macOS 15, and this app
+    /// targets 14.
+    private static func deepen(_ c: Color, _ amount: Double) -> Color {
+        let ns = NSColor(c).usingColorSpace(.sRGB) ?? .black
+        let k = NSColor(ink).usingColorSpace(.sRGB) ?? .black
+        return Color(nsColor: NSColor(
+            srgbRed: ns.redComponent * (1 - amount) + k.redComponent * amount,
+            green: ns.greenComponent * (1 - amount) + k.greenComponent * amount,
+            blue: ns.blueComponent * (1 - amount) + k.blueComponent * amount,
+            alpha: 1))
+    }
+
     /// FNV-1a over the name — stable across launches, unlike `hashValue`.
     public static func hashIndex(_ name: String, _ modulo: Int) -> Int {
         var h: UInt64 = 0xcbf29ce484222325

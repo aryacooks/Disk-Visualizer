@@ -182,9 +182,30 @@ public enum DuplicateFinder {
         for k in flat3.indices where !digests[k].isEmpty {
             byDigestAll[digests[k], default: []].append(flat3[k])
         }
+
+        // ---- Stage 4: clone detection and group assembly ----
+        //
+        // This stage used to report nothing, and it is not cheap: every member
+        // of every group costs an `fcntl(F_LOG2PHYS_EXT)` to find its first
+        // physical block. On a real home folder that is ~340,000 syscalls, and
+        // with the UI still showing "Hashing contents — 396,449 of 396,449" the
+        // whole app looked hung for minutes. The work was always fine; only the
+        // reporting was missing.
+        let dupDigests = byDigestAll.filter { $0.value.count > 1 }
+        progress?(DuplicateProgress(stage: "Checking for clones", total: dupDigests.count))
         var groups: [DuplicateGroup] = []
-        for (digest, members) in byDigestAll where members.count > 1 {
+        groups.reserveCapacity(dupDigests.count)
+        var assembled = 0
+        for (digest, members) in dupDigests {
+            if isCancelled?() == true { result.elapsed = elapsedSince(t0); return result }
             groups.append(makeGroup(store: store, digest: digest, members: members))
+            assembled += 1
+            if assembled % 256 == 0 {
+                progress?(DuplicateProgress(stage: "Checking for clones",
+                                            done: assembled,
+                                            total: dupDigests.count,
+                                            bytesHashed: bytes.value64))
+            }
         }
 
         result.bytesHashed = bytes.value64

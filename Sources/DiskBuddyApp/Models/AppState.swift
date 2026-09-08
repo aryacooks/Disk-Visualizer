@@ -13,6 +13,10 @@ public struct RecentLocation: Codable, Identifiable, Equatable {
 public final class AppState: ObservableObject {
     @Published public var isScanning: Bool = false
     @Published public var liveProgress: ScanProgress = ScanProgress()
+    /// Which part of the work is running. A scan is not one job but five, and
+    /// the last four used to happen behind a spinner that had already stopped
+    /// moving — so a finished walk looked identical to a hang.
+    @Published public var scanStage: ScanStage = .reading
     @Published public var store: NodeStore?
     @Published public var stats: ScanStats?
     @Published public var scanRootPath: String = ""
@@ -112,6 +116,12 @@ public final class AppState: ObservableObject {
     private var currentScanner: ScannerCore.Scanner?
     private var scanTask: Task<Void, Never>?
     private var progressTimer: Timer?
+    /// Bumped by every start and every cancel. The post-walk passes (quick
+    /// wins, age map) run in a detached task that `cancelScan` cannot
+    /// interrupt, so without this a Cancel pressed during them would still
+    /// publish the tree a moment later — the same class of bug as the
+    /// duplicate scanner's uncancellable `concurrentPerform`.
+    private var scanGeneration: Int = 0
 
     public init() {
         loadRecentLocations()
@@ -284,7 +294,9 @@ public final class AppState: ObservableObject {
     }
 
     public func cancelScan() {
+        scanGeneration &+= 1
         currentScanner?.cancel()
+        scanTask?.cancel()
         progressTimer?.invalidate()
         progressTimer = nil
         isScanning = false
@@ -306,7 +318,10 @@ public final class AppState: ObservableObject {
         updateVolumeInfo(for: path)
 
         self.scanRootPath = path
+        scanGeneration &+= 1
+        let generation = scanGeneration
         self.isScanning = true
+        self.scanStage = .reading
         self.liveProgress = ScanProgress(currentPath: path)
         self.currentFolderIndex = 0
         self.selectedNodeIndex = nil
@@ -320,7 +335,11 @@ public final class AppState: ObservableObject {
             guard let self = self else { return }
             let prog = scanner.currentProgress()
             Task { @MainActor in
+                guard self.scanGeneration == generation else { return }
                 self.liveProgress = prog
+                if self.scanStage == .reading || self.scanStage == .rollingUp {
+                    self.scanStage = prog.isRollingUp ? .rollingUp : .reading
+                }
                 // NOTE: we deliberately do NOT publish scanner.store mid-scan.
                 // Subtree sizes are only meaningful after rollUp(), so an early
                 // publish renders every folder as 0 B and sorts by noise.
@@ -334,9 +353,15 @@ public final class AppState: ObservableObject {
         scanTask = Task.detached(priority: .userInitiated) {
             scanner.scan(root: path, threads: threads, crossMounts: crossMounts)
 
+            if await self.isStale(generation) { return }
+            await MainActor.run { self.scanStage = .quickWins }
             let qw = QuickWinsEngine.detect(store: scanner.store, rootPath: path)
+
+            if await self.isStale(generation) { return }
+            await MainActor.run { self.scanStage = .ageMap }
             let am = AgeMapEngine.compute(store: scanner.store)
 
+            if await self.isStale(generation) { return }
             await MainActor.run {
                 self.progressTimer?.invalidate()
                 self.progressTimer = nil
@@ -357,6 +382,10 @@ public final class AppState: ObservableObject {
             }
         }
     }
+
+    /// True once a newer scan has started or the user has cancelled, in which
+    /// case this task's results must be thrown away rather than published.
+    private func isStale(_ generation: Int) -> Bool { scanGeneration != generation }
 
     /// Every completed scan is saved, which is what makes the Snapshots tab
     /// possible and what lets the next launch start instantly.
@@ -455,6 +484,40 @@ public final class AppState: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: "DiskBuddy_RecentLocations"),
            let recents = try? JSONDecoder().decode([RecentLocation].self, from: data) {
             self.recentLocations = recents
+        }
+    }
+}
+
+
+// MARK: - Scan stages
+
+/// The five things that happen between "Scan" and a usable tree. Each one is
+/// named in the UI, because "please wait" is not an answer to "is it stuck?".
+public enum ScanStage: Int, CaseIterable, Equatable, Sendable {
+    case reading        // walking the filesystem with getattrlistbulk
+    case rollingUp      // the O(n) reverse pass that sums subtree sizes
+    case quickWins      // caches, node_modules, build artifacts, big media
+    case ageMap         // bucketing every file by last-modified date
+
+    // Deliberately NOT a stage: saving the snapshot. It runs detached after
+    // the tree is already on screen, so listing it here would claim the UI is
+    // waiting on work it isn't waiting on.
+
+    public var title: String {
+        switch self {
+        case .reading:    return "Reading the filesystem"
+        case .rollingUp:  return "Adding up folder sizes"
+        case .quickWins:  return "Looking for easy wins"
+        case .ageMap:     return "Sorting by age"
+        }
+    }
+
+    public var detail: String {
+        switch self {
+        case .reading:    return "One syscall per batch of entries, on every core at once"
+        case .rollingUp:  return "Children were stored after their parents, so one reverse pass does it"
+        case .quickWins:  return "Caches, node_modules, build artifacts and large media"
+        case .ageMap:     return "So you can find what you haven't touched in years"
         }
     }
 }

@@ -105,6 +105,28 @@ tighter, and it's where every algorithm bug in this project was actually caught:
 swift run -c release dbscan ~ -n 20
 ```
 
+## While it scans
+
+<p align="center">
+  <img src="docs/art/scanning.png" alt="Scanning screen — a live ring, real counters, a files-per-second graph and the four named stages">
+</p>
+
+A scan takes over the whole window, sidebar and inspector included. That's
+deliberate: anything left on screen would be the *previous* scan's numbers,
+which look live and aren't. Partial results are worse than stale ones here —
+subtree sizes don't exist until the reverse pass runs, so a half-built tree
+reads 0 B for every folder and sorts by noise.
+
+Every number on that screen is measured. The counters are the scanner's own,
+the graph is real throughput sampled once a second, and the ring is honestly
+indeterminate — a filesystem doesn't tell you how big it is before you've
+walked it, so a percentage there would be invented.
+
+The four stages are named as they happen — reading, adding up folder sizes,
+looking for easy wins, sorting by age — because a scan isn't one job, and the
+last three used to run behind a spinner that had already stopped moving. A
+finished walk looked exactly like a hang.
+
 ## Releasing
 
 ```bash
