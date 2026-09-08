@@ -185,7 +185,11 @@ public final class NodeStore: @unchecked Sendable {
             parts.append(name(cur))
             cur = Int(parent[cur])
         }
-        return parts.reversed().joined(separator: "/")
+        let joined = parts.reversed().joined(separator: "/")
+        // A scan rooted at "/" stores "/" as the root node's name, so the plain
+        // join produced "//Users/…". POSIX doesn't care, but it is now shown to
+        // the reader, and a path with a doubled slash reads like a bug.
+        return joined.hasPrefix("//") ? String(joined.dropFirst()) : joined
     }
 
     public func children(of i: Int) -> Range<Int>? {

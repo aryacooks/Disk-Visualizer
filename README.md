@@ -176,6 +176,9 @@ is derived from the tree — the real ancestor chain, never a jump with the
 middle missing — and collapses to `root … parent child` once the trail outgrows
 the toolbar.
 
+The full path of whatever you are looking at gets its own line under the view
+switcher, and clicking it copies the path.
+
 **Back and forward** are a browser history, not a parent chain: they retrace
 where you actually went, which is a different thing once you have jumped via a
 breadcrumb, a Quick Win or Home. `⌘[` and `⌘]`, and each button's tooltip names

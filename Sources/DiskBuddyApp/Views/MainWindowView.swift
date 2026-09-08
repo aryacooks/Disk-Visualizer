@@ -437,6 +437,56 @@ private struct TabPill: View {
     }
 }
 
+/// The full path of whatever you are looking at, stated plainly.
+///
+/// Truncates in the middle only when the pane genuinely runs out of room, and
+/// keeps the last two components readable for as long as possible — the tail
+/// is the part that tells you where you are.
+private struct CurrentPathStrip: View {
+    @EnvironmentObject var app: AppState
+    @State private var hovering = false
+    @State private var copied = false
+
+    private var fullPath: String {
+        guard let store = app.store else { return "" }
+        return store.path(app.currentFolderIndex)
+    }
+
+    var body: some View {
+        if app.store != nil, !fullPath.isEmpty {
+            Button {
+                app.copyPath(nodeIndex: app.currentFolderIndex)
+                copied = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { copied = false }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: copied ? "checkmark" : "folder")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(copied ? Theme.good : Theme.inkFaint)
+                    Text(copied ? "Path copied" : fullPath)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(copied ? Theme.good : Theme.ink.opacity(0.8))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(hovering ? Theme.pillSoft.opacity(0.6) : Theme.rail)
+                        .overlay(RoundedRectangle(cornerRadius: 8)
+                            .stroke(Theme.hairline, lineWidth: 1))
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering = $0 }
+            .help("\(fullPath)\n\nClick to copy")
+            .layoutPriority(1)
+        }
+    }
+}
+
 private struct IconChip: View {
     let system: String
     var filled: Bool = false
@@ -519,27 +569,43 @@ private struct CenterPane: View {
             HStack(spacing: 10) {
                 ViewSwitcher()
                 Spacer(minLength: 8)
-                // Drop the caption before letting anything wrap.
-                ViewThatFits(in: .horizontal) {
-                    Text(app.activeCenterView.caption)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.inkFaint)
-                        .lineLimit(1)
-                        .fixedSize()
-                    Color.clear.frame(width: 0, height: 0)
-                }
+                // The toolbar breadcrumb has to survive next to five tabs and a
+                // search field, so it truncates hard — "Macintosh HD" becomes
+                // "Mac…HD". This row has the space to say where you actually
+                // are, in full.
+                // Capped rather than free: it should be the widest thing in
+                // this row without pushing the size segments or the sunburst
+                // slider around as you move between shallow and deep folders.
+                CurrentPathStrip()
+                    // A minimum as well as a maximum: with only a cap, the
+                    // HStack squeezed the flexible child down to almost
+                    // nothing and the path rendered as "//Use…apps".
+                    .frame(minWidth: 190, maxWidth: 460)
+                Spacer(minLength: 8)
                 SizeModeSegments()
                 if case .sunburst = app.activeCenterView {
                     HStack(spacing: 7) {
                         Image(systemName: "circle.hexomegrid")
                             .font(.system(size: 10)).foregroundStyle(Theme.inkFaint)
-                        Slider(value: $app.sunburstRings, in: 3...12, step: 1).frame(width: 90)
+                        Slider(value: $app.sunburstRings, in: 3...12, step: 1)
+                            .frame(width: 90)
+                            // System blue against warm paper was the one loud
+                            // thing in the whole window.
+                            .tint(Theme.gauge)
                         Text("\(Int(app.sunburstRings))")
                             .font(.system(size: 11, weight: .medium).monospacedDigit())
                             .foregroundStyle(Theme.inkSecond)
                     }
                 }
             }
+
+            // The path gets its own line rather than a slot in the row above.
+            // Squeezed in beside the view switcher, the size segments and the
+            // sunburst slider, it collapsed to "//Use…apps" — and forcing a
+            // minimum width there pushed the whole window into overflow. Here
+            // it has the full pane and competes with nothing.
+            CurrentPathStrip()
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 22)
         .padding(.top, 18)
