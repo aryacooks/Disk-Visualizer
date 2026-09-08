@@ -56,7 +56,7 @@ public struct FlameView: View {
                     }
                     .onTapGesture { p in
                         if let id = cells.last(where: { $0.rect.contains(p) })?.id {
-                            app.selectNode(id)
+                            app.activate(nodeIndex: id, anchor: p.unitAnchor(in: geo.size))
                         }
                     }
                 }

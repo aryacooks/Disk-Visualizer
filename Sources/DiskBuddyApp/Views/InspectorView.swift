@@ -185,7 +185,7 @@ public struct InspectorView: View {
             }
             HStack(spacing: 8) {
                 SmallRailButton(icon: "scope", title: "Focus") {
-                    if app.store?.isDir(i) == true { app.drillInto(nodeIndex: i) }
+                    if app.store?.isDir(i) == true { app.activate(nodeIndex: i, anchor: .center) }
                 }
                 SmallRailButton(icon: "doc.on.clipboard", title: "Copy Path") { app.copyPath(nodeIndex: i) }
             }

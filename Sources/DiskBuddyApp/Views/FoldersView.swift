@@ -3,6 +3,11 @@ import ScannerCore
 
 /// The default view: a grid of folder-shaped pastel cards, biggest first.
 public struct FoldersView: View {
+    /// Mirrors `CenterPane.space`. Declared here too so `FolderCard`, which is
+    /// private to this file, can name the coordinate space without reaching
+    /// into MainWindowView.
+    static let paneSpace = "centerPane"
+
     @EnvironmentObject var app: AppState
 
     public init() {}
@@ -60,6 +65,9 @@ private struct FolderCard: View {
     @EnvironmentObject var app: AppState
     let index: Int
     @State private var hovering = false
+    /// Where this card sits in the centre pane, so the drill-in zoom can grow
+    /// out of the card you double-clicked instead of out of the pane's middle.
+    @State private var frameInPane: CGRect = .zero
 
     var body: some View {
         guard let store = app.store else { return AnyView(EmptyView()) }
@@ -126,8 +134,19 @@ private struct FolderCard: View {
             }
             .buttonStyle(.plain)
             .onHover { hovering = $0 }
+            .background(
+                GeometryReader { g in
+                    Color.clear
+                        .onAppear { frameInPane = g.frame(in: .named(FoldersView.paneSpace)) }
+                        .onChange(of: g.frame(in: .named(FoldersView.paneSpace))) { _, f in
+                            frameInPane = f
+                        }
+                }
+            )
             .simultaneousGesture(TapGesture(count: 2).onEnded {
-                if isDir { app.drillInto(nodeIndex: index) }
+                if isDir {
+                    app.activate(nodeIndex: index, anchor: app.anchor(for: frameInPane))
+                }
             })
             .help(isDir ? "Double-click to open \(name)" : name)
         )

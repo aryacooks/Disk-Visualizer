@@ -41,7 +41,7 @@ public struct SidebarView: View {
             .buttonStyle(.plain)
 
             HStack(spacing: 8) {
-                SmallRailButton(icon: "house.fill", title: "Home") { app.goHome() }
+                SmallRailButton(icon: "house.fill", title: "Home") { app.zoomOut { app.goHome() } }
                 SmallRailButton(icon: "folder", title: "Folder…") { app.chooseFolder() }
             }
         }

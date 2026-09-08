@@ -78,7 +78,9 @@ public struct SunburstView: View {
                     }
                 }
                 .onTapGesture { p in
-                    if let id = hit(arcs, p, center, hubR, ringW, rings) { app.selectNode(id) }
+                    if let id = hit(arcs, p, center, hubR, ringW, rings) {
+                        app.activate(nodeIndex: id, anchor: p.unitAnchor(in: geo.size))
+                    }
                 }
 
                 // Hub label

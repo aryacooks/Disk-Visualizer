@@ -167,6 +167,15 @@ different projections of the same tree in memory.
 </tr>
 </table>
 
+**Click anything to go there.** In every view, clicking a shape zooms into it —
+the level you were on grows past you, anchored on what you clicked, and the
+next level settles in its place. Back plays the same motion in reverse.
+
+A click on an outer sunburst arc can drop ten levels at once, so the
+breadcrumb records the whole ancestor chain rather than a jump with the middle
+missing, and collapses to `root … parent child` once the trail outgrows the
+toolbar.
+
 **Duplicates that aren't fooled.** A three-stage funnel — group by exact size,
 hash the first and last 4 KB, then full SHA-256 only for the survivors. On a real
 home folder that's 823,921 same-size files narrowed to 57,144 genuine groups. It

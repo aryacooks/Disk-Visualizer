@@ -213,6 +213,25 @@ private struct CleanupReviewSheet: View {
 private struct TopBar: View {
     @EnvironmentObject var app: AppState
 
+    /// One entry in the rendered trail: a clickable crumb, or the elision.
+    private enum Crumb {
+        case crumb(name: String, index: Int, isLast: Bool)
+        case gap
+    }
+
+    /// Root, an ellipsis, then the last three. Drilling from a deep sunburst
+    /// arc can produce a dozen levels at once, and a trail that long doesn't
+    /// fit beside five tabs, a search field and four toolbar controls.
+    private var crumbTrail: [Crumb] {
+        let all = app.breadcrumbs
+        let last = all.count - 1
+        func entry(_ i: Int) -> Crumb {
+            .crumb(name: all[i].name, index: all[i].index, isLast: i == last)
+        }
+        guard all.count > 4 else { return all.indices.map(entry) }
+        return [entry(0), .gap] + ((all.count - 2)...last).map(entry)
+    }
+
     var body: some View {
         HStack(spacing: 6) {
             ForEach(AppState.MainTab.allCases) { tab in
@@ -222,7 +241,7 @@ private struct TopBar: View {
             Divider().frame(height: 18).padding(.horizontal, 8)
 
             // Breadcrumb
-            Button { app.navigateBack() } label: {
+            Button { app.zoomOut { app.navigateBack() } } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(app.breadcrumbs.count > 1 ? Theme.inkSecond : Theme.inkFaint.opacity(0.5))
@@ -230,19 +249,38 @@ private struct TopBar: View {
             .buttonStyle(.plain)
             .disabled(app.breadcrumbs.count <= 1)
 
-            ForEach(Array(app.breadcrumbs.enumerated()), id: \.offset) { i, crumb in
-                Button { app.navigateToBreadcrumb(index: crumb.index) } label: {
-                    Text(crumb.name)
-                        .font(.system(size: 12, weight: i == app.breadcrumbs.count - 1 ? .semibold : .regular))
-                        .foregroundStyle(i == app.breadcrumbs.count - 1 ? Theme.ink : Theme.inkSecond)
-                        .padding(.horizontal, 9).padding(.vertical, 4)
-                        .background(
-                            RoundedRectangle(cornerRadius: 7)
-                                .fill(i == app.breadcrumbs.count - 1 ? Theme.pillSoft.opacity(0.7) : .clear)
-                        )
+            ForEach(Array(crumbTrail.enumerated()), id: \.offset) { i, entry in
+                switch entry {
+                case .gap:
+                    // The elided middle. A click on it is a click on the level
+                    // just below the root, which is the only sane target.
+                    Text("…")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.inkFaint)
+                        .padding(.horizontal, 4)
+                case .crumb(let name, let index, let isLast):
+                    Button { app.zoomOut { app.navigateToBreadcrumb(index: index) } } label: {
+                        Text(name)
+                            .font(.system(size: 12, weight: isLast ? .semibold : .regular))
+                            .foregroundStyle(isLast ? Theme.ink : Theme.inkSecond)
+                            // A single click in the sunburst can land ten levels
+                            // down. Without these the trail wrapped every crumb
+                            // onto its own line and pushed the toolbar to three
+                            // times its height.
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .frame(maxWidth: 110)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .padding(.horizontal, 9).padding(.vertical, 4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 7)
+                                    .fill(isLast ? Theme.pillSoft.opacity(0.7) : .clear)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .help(name)
                 }
-                .buttonStyle(.plain)
-                if i < app.breadcrumbs.count - 1 {
+                if i < crumbTrail.count - 1 {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 8, weight: .semibold))
                         .foregroundStyle(Theme.inkFaint)
@@ -333,7 +371,12 @@ private struct TabPill: View {
         Button(action: action) {
             HStack(spacing: 5) {
                 Image(systemName: tab.icon).font(.system(size: 11, weight: .medium))
-                Text(tab.rawValue).font(.system(size: 12, weight: .medium))
+                Text(tab.rawValue)
+                    .font(.system(size: 12, weight: .medium))
+                    // "Applications" broke across two lines as soon as a deep
+                    // breadcrumb competed for the same row.
+                    .lineLimit(1)
+                    .fixedSize()
             }
             .foregroundStyle(isActive ? Theme.pillText : Theme.inkSecond)
             .padding(.horizontal, 11).padding(.vertical, 6)
@@ -366,6 +409,10 @@ private struct IconChip: View {
 // MARK: - Centre pane
 
 private struct CenterPane: View {
+    /// Named so that a folder card inside a scroll view can report where it
+    /// sits relative to the pane, and the zoom can anchor on it.
+    static let space = "centerPane"
+
     @EnvironmentObject var app: AppState
 
     private var titleName: String {
@@ -453,6 +500,23 @@ private struct CenterPane: View {
 
     @ViewBuilder
     private var content: some View {
+        // One place, every visualiser: changing folder replays the zoom.
+        centerContent
+            .zoomDrill(key: app.currentFolderIndex,
+                       anchor: app.zoomAnchor,
+                       zoomingIn: app.zoomingIn)
+            .clipped()      // the outgoing level grows past the pane's edges
+            .coordinateSpace(name: CenterPane.space)
+            .background(
+                GeometryReader { g in
+                    Color.clear.onAppear { app.paneSize = g.size }
+                        .onChange(of: g.size) { _, new in app.paneSize = new }
+                }
+            )
+    }
+
+    @ViewBuilder
+    private var centerContent: some View {
         switch app.activeCenterView {
         case .folders:            FoldersView()
         case .sunburst:           SunburstView()

@@ -17,6 +17,25 @@ public final class AppState: ObservableObject {
     /// the last four used to happen behind a spinner that had already stopped
     /// moving — so a finished walk looked identical to a hang.
     @Published public var scanStage: ScanStage = .reading
+
+    /// Where the last drill-in was clicked, in unit coordinates of the centre
+    /// pane, so the zoom appears to come out of the thing you clicked rather
+    /// than out of the middle of the window.
+    @Published public var zoomAnchor: UnitPoint = .center
+    /// Direction of the last navigation. Going in, the old view grows and the
+    /// new one arrives small; coming back, the reverse. Without this, Back
+    /// feels like another step forward.
+    @Published public var zoomingIn: Bool = true
+    /// Size of the centre pane, published so a card deep in a scroll view can
+    /// work out where it sits as a unit point without threading geometry all
+    /// the way down.
+    @Published public var paneSize: CGSize = .zero
+
+    /// Turn a rect in the centre pane's coordinate space into a zoom anchor.
+    public func anchor(for rect: CGRect) -> UnitPoint {
+        guard paneSize.width > 0, paneSize.height > 0 else { return .center }
+        return CGPoint(x: rect.midX, y: rect.midY).unitAnchor(in: paneSize)
+    }
     @Published public var store: NodeStore?
     @Published public var stats: ScanStats?
     @Published public var scanRootPath: String = ""
@@ -416,10 +435,52 @@ public final class AppState: ObservableObject {
 
     public func drillInto(nodeIndex: Int) {
         guard let store = store, store.isDir(nodeIndex) else { return }
+        guard nodeIndex != currentFolderIndex else { return }
+
+        // A click in the sunburst, treemap or flame chart can land several
+        // levels below the current root. Walk the ancestor chain and record
+        // every level, or the breadcrumb trail claims a path that doesn't
+        // exist and Back jumps further than one step.
+        var chain: [Int] = []
+        var cur = nodeIndex
+        while cur != currentFolderIndex {
+            chain.append(cur)
+            let p = Int(store.parent[cur])
+            if p < 0 { break }          // walked past the root: shouldn't happen
+            cur = p
+        }
+
         currentFolderIndex = nodeIndex
         selectedNodeIndex = nil
-        let name = store.name(nodeIndex)
-        breadcrumbs.append((name, nodeIndex))
+        for node in chain.reversed() {
+            breadcrumbs.append((store.name(node), node))
+        }
+    }
+
+    /// What a click on a shape means, in every visualiser.
+    ///
+    /// One click goes one place deeper. Directories drill in — that IS the
+    /// detail, since the pane, the inspector and the breadcrumbs all follow
+    /// `currentFolderIndex`. Files can only be selected: there is nothing
+    /// below a file to show.
+    public func activate(nodeIndex: Int, anchor: UnitPoint) {
+        guard let store = store else { return }
+        selectNode(nodeIndex)
+        guard store.isDir(nodeIndex),
+              nodeIndex != currentFolderIndex,
+              store.childCount[nodeIndex] > 0 else { return }
+        zoomAnchor = anchor
+        zoomingIn = true
+        withAnimation(.spring(response: 0.40, dampingFraction: 0.82)) {
+            drillInto(nodeIndex: nodeIndex)
+        }
+    }
+
+    /// Same zoom, played backwards.
+    public func zoomOut(_ body: () -> Void) {
+        zoomAnchor = .center
+        zoomingIn = false
+        withAnimation(.spring(response: 0.40, dampingFraction: 0.82)) { body() }
     }
 
     public func navigateToBreadcrumb(index: Int) {

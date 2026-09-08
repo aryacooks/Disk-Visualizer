@@ -88,7 +88,9 @@ public struct MindMapView: View {
                     }
                 }
                 .onTapGesture { p in
-                    if let id = hit(nodes, p) { app.selectNode(id) }
+                    if let id = hit(nodes, p) {
+                        app.activate(nodeIndex: id, anchor: p.unitAnchor(in: geo.size))
+                    }
                 }
 
                 if let store = app.store {

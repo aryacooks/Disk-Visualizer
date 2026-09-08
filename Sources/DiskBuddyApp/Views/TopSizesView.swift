@@ -136,7 +136,7 @@ private struct TopSizeRow: View {
             .buttonStyle(.plain)
             .onHover { hovering = $0 }
             .simultaneousGesture(TapGesture(count: 2).onEnded {
-                if isDir { app.drillInto(nodeIndex: index) }
+                if isDir { app.activate(nodeIndex: index, anchor: .center) }
             })
         )
     }

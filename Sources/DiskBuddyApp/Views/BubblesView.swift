@@ -61,7 +61,9 @@ public struct BubblesView: View {
                     }
                 }
                 .onTapGesture { p in
-                    if let id = hit(bubbles, p) { app.selectNode(id) }
+                    if let id = hit(bubbles, p) {
+                        app.activate(nodeIndex: id, anchor: p.unitAnchor(in: geo.size))
+                    }
                 }
 
                 if let h = hoverID, let store = app.store {
